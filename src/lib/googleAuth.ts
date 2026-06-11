@@ -5,9 +5,11 @@ import { supabase } from './supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// En Expo Go: exp://<ip>:8081 — debe estar en la allowlist de Redirect URLs de Supabase.
-// En builds nativos usa el scheme de app.json (strikex://).
-const redirectTo = AuthSession.makeRedirectUri();
+// En Expo Go: exp://<ip>:8081/--/auth-callback — debe estar en la allowlist de Redirect URLs de Supabase.
+// En builds nativos usa el scheme de app.json (strikex://auth-callback).
+const redirectTo = AuthSession.makeRedirectUri({
+  path: 'auth-callback',
+});
 
 /**
  * Parses parameters from both query parameters (?) and hash fragments (#) of a URL.
