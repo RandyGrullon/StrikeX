@@ -1,56 +1,100 @@
-# Welcome to your Expo app 👋
+# 🎳 StrikeX — Gestión completa de ligas de boliche
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+App **React Native (Expo) + Supabase** para administrar ligas de boliche de punta a punta:
+ligas, equipos, jugadores, calendario, captura de puntajes, standings, promedios, handicap,
+estadísticas avanzadas, torneos especiales y notificaciones. Corre en **iOS, Android y web**
+con diseño oscuro moderno y full responsive.
 
-## Get started
+## Roles
 
-1. Install dependencies
+- **Administrador**: crea ligas, equipos, jugadores, jornadas y partidos; captura puntajes;
+  crea torneos; envía avisos. **El primer usuario que se registra se vuelve admin automáticamente.**
+- **Jugador**: ve standings, calendario, sus estadísticas y notificaciones.
 
-   ```bash
-   npm install
-   ```
+## Setup (3 pasos)
 
-2. Start the app
+### 1. Base de datos
 
-   ```bash
-   npx expo start
-   ```
+En tu proyecto de Supabase: **SQL Editor → New query**, pega el contenido completo de
+[`supabase/migrations/001_schema.sql`](supabase/migrations/001_schema.sql) y ejecútalo.
+Eso crea todas las tablas, vistas (standings, promedios, handicap) y políticas de seguridad.
 
-In the output, you'll find options to open the app in a
+> Recomendado: en **Authentication → Providers → Email**, desactiva "Confirm email" si
+> quieres que los usuarios entren sin confirmar correo.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### 2. Credenciales
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Edita el archivo `.env` en la raíz con los datos de **Project Settings → API**:
 
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+EXPO_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=tu_anon_key
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 3. Arrancar
 
-### Other setup steps
+```bash
+npm install
+npx expo start          # escanea el QR con Expo Go, o presiona w para web
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Flujo de uso
 
-## Learn more
+1. **Regístrate** (el primer usuario es admin).
+2. En **Perfil → Crear nueva liga**: configura juegos por serie, sistema de puntos y handicap
+   (fórmula `(Base − Promedio) × %`, con tope opcional).
+3. En **Administrar liga**: agrega equipos, jugadores (con promedio inicial opcional y
+   vinculación a cuentas), y jornadas con sus partidos.
+4. En **Calendario**, toca un partido para **capturar el pinfall** de cada jugador por juego.
+   El handicap se congela automáticamente con el promedio del momento.
+5. **Posiciones, Estadísticas y el Inicio** se calculan solos: puntos por juego y por serie
+   (con handicap), promedios, juego alto, serie alta, récords y evolución por jornada.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Torneos especiales
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- **⚔️ Eliminación directa**: selecciona jugadores de una liga, se genera el bracket al azar
+  (con byes si son non), capturas duelos y avanzas rondas hasta tener campeón.
+- **🎯 Por puntos**: agrega "juegos" para todos los participantes y la tabla se ordena por
+  pinfall total acumulado.
 
-## Join the community
+## Notificaciones
 
-Join our community of developers creating universal apps.
+- Los avisos del admin (**Perfil → Enviar aviso**) aparecen in-app para todos, con contador
+  de no leídos.
+- **Push (opcional)**: la app registra el token de Expo de cada dispositivo. Para que los
+  avisos lleguen como push, despliega la edge function:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+  ```bash
+  supabase functions deploy send-push
+  ```
+
+  La app la invoca automáticamente al enviar un aviso; si no está desplegada, el aviso
+  in-app funciona igual. Nota: el push requiere un development build (`npx expo run:android`
+  / `run:ios` o EAS); en Expo Go las push tienen limitaciones.
+
+## Estructura
+
+```
+supabase/
+  migrations/001_schema.sql    # esquema completo + RLS + vistas
+  functions/send-push/         # edge function de push (opcional)
+src/
+  app/                         # rutas (expo-router)
+    (auth)/                    # login y registro
+    (tabs)/                    # inicio, posiciones, calendario, estadísticas, perfil
+    league/                    # crear y administrar ligas
+    match/[id].tsx             # captura de puntajes
+    tournaments/               # torneos especiales
+    notifications/             # avisos
+  components/                  # UI kit (Card, Button, Select, etc.)
+  context/                     # sesión (Auth) y liga seleccionada
+  hooks/                       # queries de React Query + push token
+  lib/                         # cliente supabase, theme, tipos, formato
+```
+
+## Cómo se calculan los puntos
+
+Por cada juego de un partido se comparan los totales de equipo **(pinfall + handicap)**:
+el ganador se lleva los "puntos por juego" de la liga (empate reparte mitad). Al final se
+compara el total de la serie para los "puntos por serie". Todo se calcula en vistas SQL,
+así que nunca hay resultados desactualizados.

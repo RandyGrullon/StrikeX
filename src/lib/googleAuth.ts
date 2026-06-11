@@ -1,0 +1,83 @@
+import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
+import { supabase } from './supabase';
+
+WebBrowser.maybeCompleteAuthSession();
+
+// En Expo Go: exp://<ip>:8081 — debe estar en la allowlist de Redirect URLs de Supabase.
+// En builds nativos usa el scheme de app.json (strikex://).
+const redirectTo = AuthSession.makeRedirectUri();
+
+/**
+ * Parses parameters from both query parameters (?) and hash fragments (#) of a URL.
+ */
+function parseUrlParams(url: string): Record<string, string> {
+  const params: Record<string, string> = {};
+  
+  const parseString = (str: string) => {
+    const pairs = str.split('&');
+    for (const pair of pairs) {
+      const [key, value] = pair.split('=');
+      if (key) {
+        params[decodeURIComponent(key)] = decodeURIComponent(value || '');
+      }
+    }
+  };
+
+  const queryIndex = url.indexOf('?');
+  const hashIndex = url.indexOf('#');
+
+  if (queryIndex !== -1) {
+    const end = hashIndex !== -1 && hashIndex > queryIndex ? hashIndex : url.length;
+    parseString(url.slice(queryIndex + 1, end));
+  }
+
+  if (hashIndex !== -1) {
+    parseString(url.slice(hashIndex + 1));
+  }
+
+  return params;
+}
+
+/**
+ * Inicia sesión (o registra, si la cuenta no existe) con Google vía Supabase.
+ * Resuelve cuando hay sesión; lanza si el proveedor devuelve error.
+ * Si el usuario cierra el navegador sin completar, no hace nada.
+ */
+export async function signInWithGoogle(): Promise<void> {
+  if (Platform.OS === 'web') {
+    // En web se redirige la página completa; supabase recoge la sesión al volver.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) throw error;
+    return;
+  }
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo, skipBrowserRedirect: true },
+  });
+  if (error) throw error;
+
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  if (result.type !== 'success') return; // el usuario canceló
+
+  const params = parseUrlParams(result.url);
+  if (params.error) {
+    throw new Error(params.error_description || params.error);
+  }
+
+  const { access_token, refresh_token } = params;
+  if (!access_token || !refresh_token) {
+    throw new Error('No se recibió la sesión de Google');
+  }
+  const { error: sessionError } = await supabase.auth.setSession({
+    access_token,
+    refresh_token,
+  });
+  if (sessionError) throw sessionError;
+}
+
