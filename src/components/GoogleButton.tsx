@@ -13,8 +13,9 @@ export function GoogleButton() {
     setLoading(true);
     try {
       await signInWithGoogle();
-    } catch {
-      setError('No se pudo iniciar sesión con Google');
+    } catch (e: any) {
+      console.error('Error en signInWithGoogle:', e);
+      setError(e?.message || 'No se pudo iniciar sesión con Google');
     } finally {
       setLoading(false);
     }
